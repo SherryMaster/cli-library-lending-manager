@@ -6,7 +6,9 @@ authors = [
     { name = "Shaheer Ahmed", email = "sherrymaster2@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "readchar>=4.2.2,<5",
+]
 
 [project.scripts]
 cli-library-lending-manager = "cli_library_lending_manager:main"
