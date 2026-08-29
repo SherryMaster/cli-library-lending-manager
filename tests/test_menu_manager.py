@@ -2,7 +2,11 @@ import unittest
 
 from readchar import key
 
-from cli_library_lending_manager.menu_manager import Menu, MenuItem, resolve_text
+from cli_library_lending_manager.presentation.menu_manager import (
+    Menu,
+    MenuItem,
+    resolve_text,
+)
 
 
 class MenuManagerTests(unittest.TestCase):

@@ -1,5 +1,5 @@
-from .json_storage import CorruptDataError, JsonStorage, StorageError
-from .menu_manager import Menu, MenuItem
+from .persistence import CorruptDataError, JsonStorage, StorageError
+from .presentation import Menu, MenuItem
 
 __all__ = [
     "CorruptDataError",
@@ -12,4 +12,7 @@ __all__ = [
 
 
 def main() -> None:
-    print("Hello from cli-library-lending-manager!")
+    """Run the command-line application (backward-compatible entry point)."""
+    from .presentation.cli import main as run_cli
+
+    run_cli()
