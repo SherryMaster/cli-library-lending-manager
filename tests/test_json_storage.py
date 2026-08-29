@@ -2,7 +2,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cli_library_lending_manager.json_storage import CorruptDataError, JsonStorage
+from cli_library_lending_manager.persistence.json_storage import (
+    CorruptDataError,
+    JsonStorage,
+)
 
 
 class JsonStorageTests(unittest.TestCase):
