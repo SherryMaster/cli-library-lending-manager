@@ -85,6 +85,14 @@ class Library:
         """Return a copy of the current member collection."""
         return list(self.state.members)
 
+    def list_loans(self) -> list[Loan]:
+        """Return a copy of the complete loan history."""
+        return list(self.state.loans)
+
+    def list_active_loans(self) -> list[Loan]:
+        """Return all loans that have not been returned."""
+        return [loan for loan in self.state.loans if loan.is_active]
+
     def search_books(self, query: str) -> list[Book]:
         """Find books by case-insensitive partial descriptive text."""
         term = query.strip().casefold()
