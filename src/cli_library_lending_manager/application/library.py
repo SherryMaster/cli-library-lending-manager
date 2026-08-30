@@ -3,17 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date, timedelta
 
 from cli_library_lending_manager.domain import (
     Book,
     LibraryState,
+    Loan,
     Member,
     ensure_unique_id,
-    ids_match,
     normalize_id,
 )
 
-from .errors import ActiveLoanError, BlankFieldError
+from .errors import (
+    ActiveLoanError,
+    BlankFieldError,
+    BookAlreadyLoanedError,
+    InvalidLoanDateError,
+    LoanAlreadyReturnedError,
+)
+
+LOAN_PERIOD_DAYS = 14
 
 
 def _clean_text(value: str, field_name: str) -> str:
@@ -63,6 +72,10 @@ class Library:
     def get_member(self, member_id: str) -> Member:
         """Find a member using exact stable-ID matching."""
         return self.state.get_member(member_id)
+
+    def get_loan(self, loan_id: str) -> Loan:
+        """Find a loan using exact stable-ID matching."""
+        return self.state.get_loan(loan_id)
 
     def list_books(self) -> list[Book]:
         """Return a copy of the current book collection."""
@@ -118,10 +131,7 @@ class Library:
     def remove_book(self, book_id: str) -> Book:
         """Remove and return a book unless it has an active loan."""
         book = self.get_book(book_id)
-        if any(
-            loan.is_active and ids_match(loan.book_id, book.id)
-            for loan in self.state.loans
-        ):
+        if self.state.active_loan_for_book(book.id) is not None:
             raise ActiveLoanError(f"Book has an active loan: {book.id}")
         self.state.books.remove(book)
         return book
@@ -129,10 +139,69 @@ class Library:
     def remove_member(self, member_id: str) -> Member:
         """Remove and return a member unless they have an active loan."""
         member = self.get_member(member_id)
-        if any(
-            loan.is_active and ids_match(loan.member_id, member.id)
-            for loan in self.state.loans
-        ):
+        if self.state.active_loans_for_member(member.id):
             raise ActiveLoanError(f"Member has an active loan: {member.id}")
         self.state.members.remove(member)
         return member
+
+    def checkout_book(
+        self,
+        loan_id: str,
+        book_id: str,
+        member_id: str,
+        *,
+        checkout_date: date | None = None,
+    ) -> Loan:
+        """Create a 14-day loan after validating the complete relationship."""
+        clean_loan_id = loan_id.strip()
+        normalize_id(clean_loan_id)
+        ensure_unique_id(clean_loan_id, (loan.id for loan in self.state.loans))
+        book = self.get_book(book_id)
+        member = self.get_member(member_id)
+
+        if self.state.active_loan_for_book(book.id) is not None:
+            raise BookAlreadyLoanedError(f"Book is already on loan: {book.id}")
+
+        checked_out_on = date.today() if checkout_date is None else checkout_date
+        loan = Loan(
+            id=clean_loan_id,
+            book_id=book.id,
+            member_id=member.id,
+            checkout_date=checked_out_on,
+            due_date=checked_out_on + timedelta(days=LOAN_PERIOD_DAYS),
+        )
+        self.state.loans.append(loan)
+        return loan
+
+    def return_loan(
+        self, loan_id: str, *, returned_date: date | None = None
+    ) -> Loan:
+        """Complete a loan exactly once while preserving its history."""
+        current = self.get_loan(loan_id)
+        if not current.is_active:
+            raise LoanAlreadyReturnedError(f"Loan is already returned: {current.id}")
+
+        returned_on = date.today() if returned_date is None else returned_date
+        if returned_on < current.checkout_date:
+            raise InvalidLoanDateError(
+                "Returned date cannot be earlier than checkout date"
+            )
+
+        returned = replace(current, returned_date=returned_on)
+        index = self.state.loans.index(current)
+        self.state.loans[index] = returned
+        return returned
+
+    def active_loan_for_book(self, book_id: str) -> Loan | None:
+        """Return an active loan after confirming that the book exists."""
+        book = self.get_book(book_id)
+        return self.state.active_loan_for_book(book.id)
+
+    def active_loans_for_member(self, member_id: str) -> list[Loan]:
+        """Return active loans after confirming that the member exists."""
+        member = self.get_member(member_id)
+        return self.state.active_loans_for_member(member.id)
+
+    def is_book_available(self, book_id: str) -> bool:
+        """Return availability derived from active loan records."""
+        return self.state.is_book_available(book_id)

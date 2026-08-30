@@ -81,3 +81,23 @@ class LibraryState:
             if ids_match(loan.id, loan_id):
                 return loan
         raise UnknownIdentifierError(f"Unknown loan ID: {loan_id.strip()}")
+
+    def active_loan_for_book(self, book_id: str) -> Loan | None:
+        """Return a book's active loan, or ``None`` when it has none."""
+        for loan in self.loans:
+            if loan.is_active and ids_match(loan.book_id, book_id):
+                return loan
+        return None
+
+    def active_loans_for_member(self, member_id: str) -> list[Loan]:
+        """Return all active loans belonging to a member."""
+        return [
+            loan
+            for loan in self.loans
+            if loan.is_active and ids_match(loan.member_id, member_id)
+        ]
+
+    def is_book_available(self, book_id: str) -> bool:
+        """Return availability derived from the canonical loan history."""
+        self.get_book(book_id)
+        return self.active_loan_for_book(book_id) is None
