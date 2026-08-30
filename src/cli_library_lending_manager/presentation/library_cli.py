@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from cli_library_lending_manager.application import Library
 from cli_library_lending_manager.domain import Book, Loan, Member
+from cli_library_lending_manager.persistence import StorageError
 
 from .menu_manager import Menu, MenuItem
 
@@ -81,7 +82,7 @@ class LibraryCLI:
                 self._input("Category: "),
             )
             self._output(f"Added book {book.id}: {book.title}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not add book: {error}")
         self._pause()
 
@@ -89,7 +90,7 @@ class LibraryCLI:
         try:
             member = self.library.create_member(self._input("Name: "))
             self._output(f"Added member {member.id}: {member.name}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not add member: {error}")
         self._pause()
 
@@ -112,7 +113,7 @@ class LibraryCLI:
                 category=self._input(f"New category [{book.category}]: ") or book.category,
             )
             self._output(f"Updated book {updated.id}: {updated.title}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not update book: {error}")
         self._pause()
 
@@ -127,7 +128,7 @@ class LibraryCLI:
         try:
             removed = self.library.remove_book(book.id)
             self._output(f"Removed book {removed.id}: {removed.title}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not remove book: {error}")
         self._pause()
 
@@ -149,7 +150,7 @@ class LibraryCLI:
                 member.id, name=self._input(f"New name [{member.name}]: ") or member.name
             )
             self._output(f"Updated member {updated.id}: {updated.name}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not update member: {error}")
         self._pause()
 
@@ -166,7 +167,7 @@ class LibraryCLI:
         try:
             removed = self.library.remove_member(member.id)
             self._output(f"Removed member {removed.id}: {removed.name}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not remove member: {error}")
         self._pause()
 
@@ -191,7 +192,7 @@ class LibraryCLI:
             self._output(
                 f"Checked out {book.title} to {member.name}; due {loan.due_date}"
             )
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not check out book: {error}")
         self._pause()
 
@@ -204,7 +205,7 @@ class LibraryCLI:
         try:
             returned = self.library.return_loan(loan.id)
             self._output(f"Returned loan {returned.id} on {returned.returned_date}")
-        except ValueError as error:
+        except (ValueError, StorageError) as error:
             self._output(f"Could not return loan: {error}")
         self._pause()
 

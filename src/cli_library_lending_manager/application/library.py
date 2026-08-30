@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, timedelta
 
@@ -48,8 +49,32 @@ def _next_id(prefix: str, existing_ids: list[str]) -> str:
 class Library:
     """Perform validated book and member operations on a library state."""
 
-    def __init__(self, state: LibraryState | None = None) -> None:
+    def __init__(
+        self,
+        state: LibraryState | None = None,
+        *,
+        on_change: Callable[[LibraryState], None] | None = None,
+    ) -> None:
         self.state = LibraryState() if state is None else state
+        self._on_change = on_change
+
+    def _snapshot(self) -> LibraryState:
+        """Copy the state collections so a failed save can be rolled back."""
+        return LibraryState(
+            list(self.state.books), list(self.state.members), list(self.state.loans)
+        )
+
+    def _save_change(self, previous: LibraryState) -> None:
+        """Persist a mutation, restoring the previous state if saving fails."""
+        if self._on_change is None:
+            return
+        try:
+            self._on_change(self.state)
+        except Exception:
+            self.state.books = previous.books
+            self.state.members = previous.members
+            self.state.loans = previous.loans
+            raise
 
     def add_book(
         self, book_id: str, title: str, author: str, category: str
@@ -62,8 +87,10 @@ class Library:
         clean_category = _clean_text(category, "Book category")
         ensure_unique_id(clean_id, (book.id for book in self.state.books))
 
+        previous = self._snapshot()
         book = Book(clean_id, clean_title, clean_author, clean_category)
         self.state.books.append(book)
+        self._save_change(previous)
         return book
 
     def create_book(self, title: str, author: str, category: str) -> Book:
@@ -79,8 +106,10 @@ class Library:
         clean_name = _clean_text(name, "Member name")
         ensure_unique_id(clean_id, (member.id for member in self.state.members))
 
+        previous = self._snapshot()
         member = Member(clean_id, clean_name)
         self.state.members.append(member)
+        self._save_change(previous)
         return member
 
     def create_member(self, name: str) -> Member:
@@ -148,16 +177,20 @@ class Library:
             author=_clean_text(author, "Book author"),
             category=_clean_text(category, "Book category"),
         )
+        previous = self._snapshot()
         index = self.state.books.index(current)
         self.state.books[index] = updated
+        self._save_change(previous)
         return updated
 
     def update_member(self, member_id: str, *, name: str) -> Member:
         """Replace a member's name while preserving the stable ID."""
         current = self.get_member(member_id)
         updated = replace(current, name=_clean_text(name, "Member name"))
+        previous = self._snapshot()
         index = self.state.members.index(current)
         self.state.members[index] = updated
+        self._save_change(previous)
         return updated
 
     def remove_book(self, book_id: str) -> Book:
@@ -165,7 +198,9 @@ class Library:
         book = self.get_book(book_id)
         if self.state.active_loan_for_book(book.id) is not None:
             raise ActiveLoanError(f"Book has an active loan: {book.id}")
+        previous = self._snapshot()
         self.state.books.remove(book)
+        self._save_change(previous)
         return book
 
     def remove_member(self, member_id: str) -> Member:
@@ -173,7 +208,9 @@ class Library:
         member = self.get_member(member_id)
         if self.state.active_loans_for_member(member.id):
             raise ActiveLoanError(f"Member has an active loan: {member.id}")
+        previous = self._snapshot()
         self.state.members.remove(member)
+        self._save_change(previous)
         return member
 
     def checkout_book(
@@ -202,7 +239,9 @@ class Library:
             checkout_date=checked_out_on,
             due_date=checked_out_on + timedelta(days=LOAN_PERIOD_DAYS),
         )
+        previous = self._snapshot()
         self.state.loans.append(loan)
+        self._save_change(previous)
         return loan
 
     def create_loan(
@@ -232,9 +271,11 @@ class Library:
                 "Returned date cannot be earlier than checkout date"
             )
 
+        previous = self._snapshot()
         returned = replace(current, returned_date=returned_on)
         index = self.state.loans.index(current)
         self.state.loans[index] = returned
+        self._save_change(previous)
         return returned
 
     def active_loan_for_book(self, book_id: str) -> Loan | None:
