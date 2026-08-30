@@ -30,8 +30,22 @@ replace, and remove validated records over the life of the process.
 The roadmap defines separate tasks for these concerns, so this model does not
 yet decide or implement them:
 
-- identifier normalization, case sensitivity, lookup, and duplicate detection;
 - blank-field validation and CRUD operations;
 - checkout, due-date, and return mutations;
 - JSON serialization and recovery;
 - search, ordering, derived views, and statistics.
+
+## Stable identifier rule
+
+Book, member, and loan IDs use one exact-lookup rule. Surrounding whitespace is
+ignored and matching is case-insensitive using `str.casefold()`:
+
+```text
+B001 == b001 == " B001 "
+```
+
+The originally entered value remains on the record for display. Only comparison
+uses the normalized value. Blank IDs are invalid, and equivalent IDs may never
+coexist. `domain.identifiers` owns normalization, equality, and duplicate
+detection; `LibraryState.get_book`, `get_member`, and `get_loan` use that same
+rule for exact lookup.
