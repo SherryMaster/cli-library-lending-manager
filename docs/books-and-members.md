@@ -15,3 +15,14 @@
 
 These operations have no terminal input/output and no JSON knowledge. Future
 presentation code can call them without owning library correctness rules.
+
+## End-user selection and generated IDs
+
+The terminal UI generates sequential IDs (`B001`, `M001`, and `L001`) instead
+of asking the operator to invent them. Generation considers historical loan
+references, so an ID is not reused after its old book or member is removed.
+
+Normal operations present arrow-key selection menus showing book titles and
+authors, member names, or book-to-member loan labels. IDs remain visible as
+supporting information, but the operator does not need to memorize or type
+them. Text input is reserved for descriptive fields and search terms.

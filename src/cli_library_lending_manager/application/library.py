@@ -33,6 +33,18 @@ def _clean_text(value: str, field_name: str) -> str:
     return cleaned
 
 
+def _next_id(prefix: str, existing_ids: list[str]) -> str:
+    """Generate the next numbered ID without reusing historical identifiers."""
+    highest = 0
+    folded_prefix = prefix.casefold()
+    for identifier in existing_ids:
+        normalized = identifier.strip().casefold()
+        number = normalized.removeprefix(folded_prefix)
+        if normalized.startswith(folded_prefix) and number.isdigit():
+            highest = max(highest, int(number))
+    return f"{prefix}{highest + 1:03d}"
+
+
 class Library:
     """Perform validated book and member operations on a library state."""
 
@@ -54,6 +66,12 @@ class Library:
         self.state.books.append(book)
         return book
 
+    def create_book(self, title: str, author: str, category: str) -> Book:
+        """Add a book with an automatically generated stable ID."""
+        used_ids = [book.id for book in self.state.books]
+        used_ids.extend(loan.book_id for loan in self.state.loans)
+        return self.add_book(_next_id("B", used_ids), title, author, category)
+
     def add_member(self, member_id: str, name: str) -> Member:
         """Validate and add a member, then return the new record."""
         clean_id = member_id.strip()
@@ -64,6 +82,12 @@ class Library:
         member = Member(clean_id, clean_name)
         self.state.members.append(member)
         return member
+
+    def create_member(self, name: str) -> Member:
+        """Add a member with an automatically generated stable ID."""
+        used_ids = [member.id for member in self.state.members]
+        used_ids.extend(loan.member_id for loan in self.state.loans)
+        return self.add_member(_next_id("M", used_ids), name)
 
     def get_book(self, book_id: str) -> Book:
         """Find a book using exact stable-ID matching."""
@@ -180,6 +204,19 @@ class Library:
         )
         self.state.loans.append(loan)
         return loan
+
+    def create_loan(
+        self,
+        book_id: str,
+        member_id: str,
+        *,
+        checkout_date: date | None = None,
+    ) -> Loan:
+        """Check out a book with an automatically generated loan ID."""
+        loan_id = _next_id("L", [loan.id for loan in self.state.loans])
+        return self.checkout_book(
+            loan_id, book_id, member_id, checkout_date=checkout_date
+        )
 
     def return_loan(
         self, loan_id: str, *, returned_date: date | None = None

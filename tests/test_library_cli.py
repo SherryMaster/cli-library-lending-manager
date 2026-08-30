@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from cli_library_lending_manager.application import Library
 from cli_library_lending_manager.presentation.library_cli import LibraryCLI
@@ -24,55 +25,51 @@ class LibraryCLITests(unittest.TestCase):
 
         self.assertEqual(names, ["Books", "Members", "Loans", "Exit"])
 
-    def test_user_can_add_entities_checkout_and_return(self) -> None:
+    def test_user_can_add_entities_checkout_and_return_without_typing_ids(self) -> None:
         terminal = FakeTerminal(
-            [
-                "B001", "Dune", "Frank Herbert", "Science Fiction", "",
-                "M001", "Sara Khan", "",
-                "L001", "B001", "M001", "",
-                "L001", "",
-            ]
+            ["Dune", "Frank Herbert", "Science Fiction", "", "Sara Khan", "", "", ""]
         )
         library = Library()
-        cli = LibraryCLI(
-            library, input_fn=terminal.input, output_fn=terminal.print
-        )
+        cli = LibraryCLI(library, input_fn=terminal.input, output_fn=terminal.print)
 
         cli.add_book()
         cli.add_member()
-        cli.checkout_book()
-        cli.return_loan()
+        book = library.list_books()[0]
+        member = library.list_members()[0]
+        cli.checkout_book(book, member)
+        loan = library.list_active_loans()[0]
+        cli.return_loan(loan)
 
-        self.assertEqual(library.get_book("B001").title, "Dune")
-        self.assertEqual(library.get_member("M001").name, "Sara Khan")
+        self.assertEqual(book.id, "B001")
+        self.assertEqual(member.id, "M001")
+        self.assertEqual(loan.id, "L001")
         self.assertFalse(library.get_loan("L001").is_active)
-        self.assertTrue(any("Checked out B001" in line for line in terminal.output))
-        self.assertTrue(any("Returned loan L001" in line for line in terminal.output))
+        self.assertTrue(any("Checked out Dune" in line for line in terminal.output))
 
-    def test_invalid_input_reports_error_and_returns_control(self) -> None:
-        terminal = FakeTerminal(["B999", ""])
-        cli = LibraryCLI(
-            Library(), input_fn=terminal.input, output_fn=terminal.print
-        )
+    def test_book_choices_show_names_instead_of_requiring_ids(self) -> None:
+        library = Library()
+        library.create_book("Dune", "Frank Herbert", "Science Fiction")
+        library.create_book("The Hobbit", "Tolkien", "Fantasy")
+        cli = LibraryCLI(library)
 
-        cli.return_loan()
+        with patch(
+            "cli_library_lending_manager.presentation.library_cli.Menu"
+        ) as menu_class:
+            cli.choose_book_to_update()
 
-        self.assertTrue(terminal.output[0].startswith("Could not return loan:"))
-
-    def test_empty_views_are_readable(self) -> None:
-        terminal = FakeTerminal(["", "", ""])
-        cli = LibraryCLI(
-            Library(), input_fn=terminal.input, output_fn=terminal.print
-        )
-
-        cli.list_books()
-        cli.list_members()
-        cli.list_active_loans()
-
+        items = menu_class.call_args.args[1]
         self.assertEqual(
-            terminal.output,
-            ["No books found.", "No members found.", "No loans found."],
+            [item.name for item in items],
+            ["Dune — Frank Herbert", "The Hobbit — Tolkien", "Back"],
         )
+
+    def test_empty_selection_menu_is_readable(self) -> None:
+        terminal = FakeTerminal([""])
+        cli = LibraryCLI(Library(), input_fn=terminal.input, output_fn=terminal.print)
+
+        cli.browse_books()
+
+        self.assertEqual(terminal.output, ["No books found."])
 
 
 if __name__ == "__main__":
