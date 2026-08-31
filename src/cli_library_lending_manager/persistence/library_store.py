@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,8 +38,35 @@ class JsonLibraryStore:
 
     def save(self, state: LibraryState) -> None:
         """Serialize and atomically save a complete library state."""
-        self.storage.save(
-            {
+        self.storage.save(self._data_from_state(state))
+
+    def backup(
+        self,
+        state: LibraryState,
+        *,
+        backup_directory: Path | None = None,
+        now: datetime | None = None,
+    ) -> Path:
+        """Write a timestamped export without changing the canonical file."""
+        directory = (
+            self.file_path.parent / "backups"
+            if backup_directory is None
+            else backup_directory
+        )
+        timestamp = datetime.now() if now is None else now
+        stem = f"library-backup-{timestamp:%Y%m%d-%H%M%S}"
+        destination = directory / f"{stem}.json"
+        number = 2
+        while destination.exists():
+            destination = directory / f"{stem}-{number}.json"
+            number += 1
+        JsonStorage(destination).save(self._data_from_state(state))
+        return destination
+
+    @staticmethod
+    def _data_from_state(state: LibraryState) -> dict[str, Any]:
+        """Convert canonical records into JSON-compatible values."""
+        return {
                 "books": [
                     {
                         "id": book.id,
@@ -69,7 +96,6 @@ class JsonLibraryStore:
                     for loan in state.loans
                 ],
             }
-        )
 
     def _state_from_data(self, data: Any) -> LibraryState:
         if not isinstance(data, dict):

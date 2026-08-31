@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from cli_library_lending_manager.application import Library
 from cli_library_lending_manager.presentation.library_cli import LibraryCLI
+from cli_library_lending_manager.presentation.menu_manager import resolve_text
 
 
 class FakeTerminal:
@@ -21,9 +22,19 @@ class LibraryCLITests(unittest.TestCase):
     def test_main_menu_exposes_current_features(self) -> None:
         cli = LibraryCLI(Library())
 
-        names = [item.name for item in cli.create_main_menu().get_items()]
+        names = [resolve_text(item.name) for item in cli.create_main_menu().get_items()]
 
-        self.assertEqual(names, ["Books", "Members", "Loans", "Exit"])
+        self.assertEqual(
+            names,
+            [
+                "Dashboard — 0 books · 0 active",
+                "Books",
+                "Members",
+                "Loans",
+                "Export backup",
+                "Exit",
+            ],
+        )
 
     def test_user_can_add_entities_checkout_and_return_without_typing_ids(self) -> None:
         terminal = FakeTerminal(
@@ -70,6 +81,50 @@ class LibraryCLITests(unittest.TestCase):
         cli.browse_books()
 
         self.assertEqual(terminal.output, ["No books found."])
+
+    def test_dashboard_and_book_details_show_derived_information(self) -> None:
+        terminal = FakeTerminal(["", ""])
+        library = Library()
+        book = library.create_book("Dune", "Frank Herbert", "Science Fiction")
+        member = library.create_member("Sara Khan")
+        library.create_loan(book.id, member.id)
+        cli = LibraryCLI(library, input_fn=terminal.input, output_fn=terminal.print)
+
+        cli.show_dashboard()
+        cli.show_book(book)
+
+        self.assertIn("Books: 1", terminal.output)
+        self.assertIn("Active loans: 1", terminal.output)
+        self.assertIn("Status: On loan to Sara Khan", terminal.output)
+        self.assertIn("Loan history: 1", terminal.output)
+
+    def test_long_book_list_is_paginated(self) -> None:
+        library = Library()
+        for number in range(10):
+            library.create_book(f"Book {number}", "Author", "Category")
+        cli = LibraryCLI(library)
+
+        with patch(
+            "cli_library_lending_manager.presentation.library_cli.Menu"
+        ) as menu_class:
+            cli.browse_books()
+
+        title, items = menu_class.call_args.args
+        self.assertEqual(title, "All books · Page 1/2")
+        self.assertEqual(len(items), 10)
+        self.assertEqual(items[-2].name, "Next page →")
+        self.assertEqual(items[-1].name, "Back")
+
+    def test_temporary_session_explains_unavailable_backup(self) -> None:
+        terminal = FakeTerminal([""])
+        cli = LibraryCLI(Library(), input_fn=terminal.input, output_fn=terminal.print)
+
+        cli.export_backup()
+
+        self.assertEqual(
+            terminal.output,
+            ["Backup is unavailable in a temporary unsaved session."],
+        )
 
 
 if __name__ == "__main__":

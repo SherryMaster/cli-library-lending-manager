@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from cli_library_lending_manager.application import Library
@@ -74,6 +74,26 @@ class JsonLibraryStoreTests(unittest.TestCase):
             library.create_book("Dune", "Frank Herbert", "Fiction")
 
         self.assertEqual(library.state, LibraryState())
+
+    def test_backup_exports_state_without_changing_canonical_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "library.json"
+            store = JsonLibraryStore(path)
+            state = LibraryState(
+                [Book("B001", "Dune", "Frank Herbert", "Fiction")], [], []
+            )
+            store.save(state)
+            canonical_before = path.read_text(encoding="utf-8")
+
+            backup = store.backup(
+                state, now=datetime(2026, 8, 31, 12, 30, 45)
+            )
+
+            self.assertEqual(
+                backup.name, "library-backup-20260831-123045.json"
+            )
+            self.assertEqual(JsonLibraryStore(backup).load(), state)
+            self.assertEqual(path.read_text(encoding="utf-8"), canonical_before)
 
     def test_invalid_top_level_shapes_are_rejected(self) -> None:
         invalid_values = [

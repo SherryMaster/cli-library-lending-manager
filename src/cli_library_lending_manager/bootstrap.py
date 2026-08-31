@@ -16,7 +16,9 @@ def create_main_menu(
     """Load the library and connect persistence to the terminal UI."""
     if temporary:
         library = Library()
+        backup = None
     else:
         store = JsonLibraryStore(data_path)
         library = Library(store.load(), on_change=store.save)
-    return LibraryCLI(library).create_main_menu()
+        backup = lambda: store.backup(library.state)
+    return LibraryCLI(library, backup_fn=backup).create_main_menu()
