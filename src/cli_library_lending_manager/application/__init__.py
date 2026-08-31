@@ -7,7 +7,7 @@ from .errors import (
     InvalidLoanDateError,
     LoanAlreadyReturnedError,
 )
-from .library import LOAN_PERIOD_DAYS, Library
+from .library import LOAN_PERIOD_DAYS, Library, LibraryStatistics
 from .ports import Storage
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "InvalidLoanDateError",
     "LOAN_PERIOD_DAYS",
     "Library",
+    "LibraryStatistics",
     "LoanAlreadyReturnedError",
     "Storage",
 ]

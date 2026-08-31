@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from cli_library_lending_manager.domain import (
@@ -24,6 +24,17 @@ from .errors import (
 )
 
 LOAN_PERIOD_DAYS = 14
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryStatistics:
+    """Derived summary counts for the current library state."""
+
+    total_books: int
+    total_members: int
+    active_loans: int
+    overdue_loans: int
+    historical_loans: int
 
 
 def _clean_text(value: str, field_name: str) -> str:
@@ -131,27 +142,129 @@ class Library:
         return self.state.get_loan(loan_id)
 
     def list_books(self) -> list[Book]:
-        """Return a copy of the current book collection."""
-        return list(self.state.books)
+        """Return books ordered by title, author, then stable ID."""
+        return sorted(
+            self.state.books,
+            key=lambda book: (
+                book.title.casefold(),
+                book.author.casefold(),
+                normalize_id(book.id),
+            ),
+        )
 
     def list_members(self) -> list[Member]:
-        """Return a copy of the current member collection."""
-        return list(self.state.members)
+        """Return members ordered by name, then stable ID."""
+        return sorted(
+            self.state.members,
+            key=lambda member: (member.name.casefold(), normalize_id(member.id)),
+        )
 
     def list_loans(self) -> list[Loan]:
-        """Return a copy of the complete loan history."""
-        return list(self.state.loans)
+        """Return newest loans first, using stable ID to break date ties."""
+        return sorted(
+            self.state.loans,
+            key=lambda loan: (-loan.checkout_date.toordinal(), normalize_id(loan.id)),
+        )
 
     def list_active_loans(self) -> list[Loan]:
-        """Return all loans that have not been returned."""
-        return [loan for loan in self.state.loans if loan.is_active]
+        """Return active loans ordered by due date, then stable ID."""
+        return sorted(
+            (loan for loan in self.state.loans if loan.is_active),
+            key=lambda loan: (loan.due_date, normalize_id(loan.id)),
+        )
+
+    def list_available_books(self) -> list[Book]:
+        """Return books with no active loan in default book order."""
+        return [book for book in self.list_books() if self.is_book_available(book.id)]
+
+    def list_books_on_loan(self) -> list[Book]:
+        """Return books currently referenced by active loans."""
+        return [
+            book for book in self.list_books() if not self.is_book_available(book.id)
+        ]
+
+    def list_returned_loans(self) -> list[Loan]:
+        """Return only completed historical loans in default history order."""
+        return [loan for loan in self.list_loans() if not loan.is_active]
+
+    def list_overdue_loans(self, *, as_of: date | None = None) -> list[Loan]:
+        """Return active loans whose due date is earlier than the chosen date."""
+        today = date.today() if as_of is None else as_of
+        return [loan for loan in self.list_active_loans() if loan.due_date < today]
+
+    def loans_for_book(self, book_id: str) -> list[Loan]:
+        """Return complete history for a known book."""
+        book = self.get_book(book_id)
+        return [
+            loan
+            for loan in self.list_loans()
+            if normalize_id(loan.book_id) == normalize_id(book.id)
+        ]
+
+    def loans_for_member(self, member_id: str) -> list[Loan]:
+        """Return complete history for a known member."""
+        member = self.get_member(member_id)
+        return [
+            loan
+            for loan in self.list_loans()
+            if normalize_id(loan.member_id) == normalize_id(member.id)
+        ]
+
+    def list_categories(self) -> list[str]:
+        """Return distinct categories in case-insensitive alphabetical order."""
+        categories = {book.category for book in self.state.books}
+        return sorted(categories, key=str.casefold)
+
+    def books_in_category(self, category: str) -> list[Book]:
+        """Return books in one exact case-insensitive category."""
+        wanted = category.strip().casefold()
+        return [
+            book for book in self.list_books() if book.category.casefold() == wanted
+        ]
+
+    def books_sorted_by_author(self) -> list[Book]:
+        """Return books ordered by author, title, then stable ID."""
+        return sorted(
+            self.state.books,
+            key=lambda book: (
+                book.author.casefold(),
+                book.title.casefold(),
+                normalize_id(book.id),
+            ),
+        )
+
+    def statistics(self, *, as_of: date | None = None) -> LibraryStatistics:
+        """Calculate all dashboard counts from canonical records."""
+        return LibraryStatistics(
+            total_books=len(self.state.books),
+            total_members=len(self.state.members),
+            active_loans=len(self.list_active_loans()),
+            overdue_loans=len(self.list_overdue_loans(as_of=as_of)),
+            historical_loans=len(self.state.loans),
+        )
+
+    @staticmethod
+    def loan_due_status(loan: Loan, *, as_of: date | None = None) -> str:
+        """Return a readable status derived from canonical loan dates."""
+        if not loan.is_active:
+            return f"Returned {loan.returned_date}"
+        today = date.today() if as_of is None else as_of
+        days = (loan.due_date - today).days
+        if days < 0:
+            amount = abs(days)
+            return f"Overdue by {amount} day{'s' if amount != 1 else ''}"
+        if days == 0:
+            return "Due today"
+        if days <= 3:
+            return f"Due soon: {days} day{'s' if days != 1 else ''}"
+        return f"Due in {days} days"
 
     def search_books(self, query: str) -> list[Book]:
         """Find books by case-insensitive partial descriptive text."""
         term = query.strip().casefold()
         return [
             book
-            for book in self.state.books
+            for book in self.list_books()
             if term in book.title.casefold()
             or term in book.author.casefold()
             or term in book.category.casefold()
@@ -162,7 +275,7 @@ class Library:
         term = query.strip().casefold()
         return [
             member
-            for member in self.state.members
+            for member in self.list_members()
             if term in member.name.casefold()
         ]
 
