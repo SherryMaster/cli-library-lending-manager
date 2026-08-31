@@ -1,7 +1,7 @@
 [project]
 name = "cli-library-lending-manager"
 version = "0.1.0"
-description = "Add your description here"
+description = "Persistent keyboard-driven terminal library lending manager"
 authors = [
     { name = "Shaheer Ahmed", email = "sherrymaster2@gmail.com" }
 ]
